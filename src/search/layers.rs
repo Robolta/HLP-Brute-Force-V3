@@ -1,4 +1,4 @@
-use std::{cmp::max, collections::HashMap};
+use std::cmp::{min, max};
 use itertools::iproduct;
 use std::collections::HashSet;
 
@@ -137,11 +137,14 @@ impl Layers {
             for (child_index, child) in (&self.layers.clone()).iter().enumerate() {
 
                 let current_output = child.pass(parent.output);
-
                 if ignored.contains(&current_output) { continue }
-                ignored.insert(current_output);
 
-                if distinct(current_output) < DISTINCT { continue; }
+                // Adding a worst case calculation can potentially avoid the proper function
+                let worst = child.distinct - min(child.distinct, STATES - parent.distinct + 1);
+                if worst < DISTINCT && distinct(current_output) < DISTINCT { continue; }
+
+                // Moving this after the distinct condition seems to improve performance, so it only inserts successful cases
+                ignored.insert(current_output);
 
                 self.layers[parent_index].children.push(child_index);
                 self.layers[parent_index].valid_parent = true;
