@@ -12,12 +12,14 @@ A program designed to solve the Hex Layer Problem.
 ## Why are there 3 Versions?
 
 Version 1
+
 Pros:
 - Does its job
 Cons:
 - Horribly designed, hard to modify
 
 Version 2
+
 Pros:
 - Well designed, easy to modify
 Cons:
