@@ -1,6 +1,7 @@
-use std::cmp::{min, max};
+use std::{cmp::{min, max}, num::NonZeroUsize};
 use itertools::iproduct;
 use std::collections::HashSet;
+use lru::LruCache;
 
 use crate::{config::{STATES, DISTINCT, DEBUG_OUTPUTS, self}, loading::ProgressBar};
 
@@ -55,14 +56,35 @@ impl Layer {
 
         for (input, index) in (0..STATES as u8).zip(0..STATES) {
             output[index] = max(
-                comparator(input as u8, side, side_mode),
-                comparator(back, input as u8, back_mode),
+                comparator(input, side, side_mode),
+                comparator(back, input, back_mode),
             )
         }
 
         let side_star = if side_mode { "*" } else { "" };
         let back_star = if back_mode { "*" } else { "" };
         let notation = format!("{side_star}{side},{back_star}{back};");
+
+        Self {
+            output,
+            distinct: distinct(output),
+            notation,
+            children: Vec::new(),
+            valid_parent: false,
+        }
+    }
+
+    fn alternate(compare: u8, subtract: u8) -> Self {
+        let mut output = [0; STATES];
+
+        for (input, index) in (0..STATES as u8).zip(0..STATES) {
+            output[index] = max(
+                comparator(compare, input, false),
+                comparator(subtract, input, true)
+            )
+        }
+
+        let notation = format!("");
 
         Self {
             output,
@@ -96,7 +118,8 @@ impl Layers {
         ignored.insert(ascending);
 
         let mut layers = Vec::new();
-        for (side_mode, back_mode, side, back) in iproduct!([false, true], [false, true], 0..STATES as u8, 0..STATES as u8) {
+        let states_u8 = STATES as u8;
+        for (side_mode, back_mode, side, back) in iproduct!([false, true], [false, true], 0..states_u8, 0..states_u8) {
             
             if debugging { debugger.add(1); }
 
@@ -108,6 +131,23 @@ impl Layers {
             if current_layer.distinct < DISTINCT { continue; }
 
             layers.push(current_layer.clone());
+        }
+
+        // Input goes into the side on both comparators.
+        // If the comparator states were the same then it'd be useless, so there are always a compare and a subtract/
+        for (compare, subtract) in iproduct!(0..states_u8, 0..states_u8) {
+
+            if debugging { debugger.add(1); }
+
+            let current_layer = Layer::alternate(compare, subtract);
+
+            if ignored.contains(&current_layer.output) { continue; }
+            ignored.insert(current_layer.output);
+
+            if current_layer.distinct < DISTINCT { continue; }
+
+            layers.push(current_layer.clone());
+
         }
 
         if debugging { debugger.results(&format!("All Layers Generated ({})", layers.len())); }
@@ -158,9 +198,59 @@ impl Layers {
 
         if debugging { debugger.results(&format!("All Pairs Generated ({})", pair_count)); }
     }
+    /*
+    fn start_search(&self) {
+        let mut data_state = [0; STATES];
+        for i in 0..STATES {
+            data_state[i] = i as u8;
+        }
+
+        let mut layer_indices = Vec::new();
+        for i in 0..self.layers.len() {
+            layer_indices.push(i);
+        }
+
+        let mut legality_cache = &mut CacheManager::new();
+
+        for depth in 1..255 {
+            let (mut legality_cache, solution) = self.search(data_state, &layer_indices, depth, &mut legality_cache);
+            match solution {
+                Some(function) => {
+
+                }
+                None => continue,
+            }
+        }
+    }
+
+    fn search<'a>(&self, data_state: [u8; STATES], layer_indices: &Vec<usize>, depth: u8, &mut cache_manager: &'a mut CacheManager) -> (&'a mut CacheManager, Option<Vec<&Layer>>) {
+        for layer_index in layer_indices {
+            let layer = &self.layers[*layer_index];
+            let new_data_state = layer.pass(data_state);
+            let result;
+            (&mut cache_manager, result) = self.search(new_data_state, &layer.children, depth - 1, &mut cache_manager);
+            match result {
+                Some(mut function) => {
+                    function.insert(0, layer);
+                    return (&mut cache_manager, Some(function))
+                }
+                None => continue,
+            }
+        }
+
+        (&mut cache_manager, None)
+    }
+    */
 }
 
-struct Composite {
-    layers: Vec<Layer>,
-    outputs: Vec<[u8; STATES]>,
+struct CacheManager {
+    legality_cache: LruCache<[u8; STATES], bool>,
+}
+
+impl CacheManager {
+    fn new() -> Self {
+        Self {
+            legality_cache: LruCache::new(NonZeroUsize::new(10000).unwrap()),
+        }
+    }
 }
